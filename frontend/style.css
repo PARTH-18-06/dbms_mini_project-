@@ -118,7 +118,7 @@ nav a:hover {
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 14px;
     margin-bottom: 22px;
 }
@@ -193,6 +193,12 @@ nav a:hover {
     color: var(--danger);
 }
 
+.helper-text {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
 .form-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -209,7 +215,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
     width: 100%;
     min-height: 40px;
     border: 1px solid var(--line);
@@ -221,9 +228,23 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
     border-color: var(--primary);
     outline: 2px solid rgba(15, 118, 110, 0.16);
+}
+
+textarea {
+    min-height: 88px;
+    resize: vertical;
+}
+
+.field-span-2 {
+    grid-column: span 2;
+}
+
+.field-span-full {
+    grid-column: 1 / -1;
 }
 
 .toolbar {
@@ -263,6 +284,12 @@ tr:hover td {
     background: #fbfdfc;
 }
 
+.empty-state {
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+}
+
 .badge {
     display: inline-flex;
     align-items: center;
@@ -279,10 +306,22 @@ tr:hover td {
     margin: 0;
 }
 
+.inline-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .small-button {
     min-height: 32px;
     padding: 6px 10px;
     font-size: 12px;
+}
+
+.mini-input {
+    max-width: 78px;
+    min-height: 32px;
+    padding: 6px 8px;
 }
 
 code {

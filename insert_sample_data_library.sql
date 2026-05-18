@@ -249,3 +249,17 @@ VALUES
 (99, 49, 9, 9, '2026-04-27', '2026-05-11', NULL, 0.00, 'ISSUED'),
 (100, 50, 10, 10, '2026-04-28', '2026-05-12', NULL, 0.00, 'ISSUED');
 
+INSERT INTO Book_Requests
+    (request_id, member_id, book_id, requested_title, requested_author, requested_isbn, category, request_notes, request_date, status, approved_date, purchase_date)
+VALUES
+    (1, 11, 46, 'Computer Networks', 'Andrew S. Tanenbaum', '9780132126953', 'Networking', 'Needed for semester project.', '2026-05-10', 'PENDING', NULL, NULL),
+    (2, 12, 46, 'Computer Networks', 'Andrew S. Tanenbaum', '9780132126953', 'Networking', 'Shared demand from lab batch.', '2026-05-11', 'PENDING', NULL, NULL),
+    (3, 13, 46, 'Computer Networks', 'Andrew S. Tanenbaum', '9780132126953', 'Networking', 'Copies are exhausted in library.', '2026-05-12', 'PENDING', NULL, NULL),
+    (4, 14, 47, 'Operating System Concepts', 'Abraham Silberschatz', '9781119456339', 'Operating Systems', 'Required for OS viva.', '2026-05-11', 'APPROVED_FOR_PURCHASE', '2026-05-16', NULL),
+    (5, 15, 47, 'Operating System Concepts', 'Abraham Silberschatz', '9781119456339', 'Operating Systems', 'Needed for assignment reference.', '2026-05-13', 'APPROVED_FOR_PURCHASE', '2026-05-16', NULL),
+    (6, 16, NULL, 'Clean Architecture', 'Robert C. Martin', '9780134494166', 'Software Engineering', 'Requested as a new title for design patterns club.', '2026-05-12', 'PENDING', NULL, NULL),
+    (7, 17, NULL, 'Clean Architecture', 'Robert C. Martin', '9780134494166', 'Software Engineering', 'Popular among placement prep students.', '2026-05-13', 'PENDING', NULL, NULL),
+    (8, 18, NULL, 'Designing Data-Intensive Applications', 'Martin Kleppmann', '9781449373320', 'Database', 'Useful for advanced DBMS and systems reading.', '2026-05-14', 'PENDING', NULL, NULL),
+    (9, 19, 48, 'The Pragmatic Programmer', 'Andrew Hunt', '9780135957059', 'Programming', 'Extra copy requested for coding club.', '2026-05-15', 'PURCHASED', '2026-05-17', '2026-05-18'),
+    (10, 20, 48, 'The Pragmatic Programmer', 'Andrew Hunt', '9780135957059', 'Programming', 'Would like more copies in the reading section.', '2026-05-16', 'PURCHASED', '2026-05-17', '2026-05-18');
+

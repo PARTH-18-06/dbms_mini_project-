@@ -3,6 +3,7 @@ require_once __DIR__ . '/db.php';
 
 try {
     $connection = db();
+    ensure_book_requests_table($connection);
 } catch (Throwable $error) {
     render_db_error($error->getMessage());
 }
@@ -11,6 +12,7 @@ $totalAuthors = table_count($connection, 'Authors');
 $totalBooks = table_count($connection, 'Books');
 $totalMembers = table_count($connection, 'Members');
 $totalIssues = table_count($connection, 'Issue_Books');
+$totalRequests = table_count($connection, 'Book_Requests');
 
 $recentIssues = $connection->query(
     "SELECT
@@ -40,6 +42,29 @@ $categoryRows = $connection->query(
     LIMIT 6"
 );
 
+$topQueueRequests = $connection->query(
+    "SELECT
+        CASE
+            WHEN br.book_id IS NULL THEN br.requested_title
+            ELSE b.title
+        END AS requested_title,
+        CASE
+            WHEN br.book_id IS NULL THEN br.requested_author
+            ELSE a.author_name
+        END AS requested_author,
+        SUM(CASE WHEN br.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_requests,
+        COUNT(*) AS total_requests
+    FROM Book_Requests br
+    LEFT JOIN Books b ON br.book_id = b.book_id
+    LEFT JOIN Authors a ON b.author_id = a.author_id
+    GROUP BY
+        br.book_id,
+        CASE WHEN br.book_id IS NULL THEN LOWER(TRIM(br.requested_title)) ELSE NULL END,
+        CASE WHEN br.book_id IS NULL THEN LOWER(TRIM(COALESCE(br.requested_author, ''))) ELSE NULL END
+    ORDER BY pending_requests DESC, total_requests DESC, requested_title ASC
+    LIMIT 5"
+)->fetch_all(MYSQLI_ASSOC);
+
 render_header('Dashboard', 'dashboard');
 ?>
 
@@ -66,6 +91,10 @@ render_header('Dashboard', 'dashboard');
     <article class="stat-card">
         <span>Issue Records</span>
         <strong><?php echo e($totalIssues); ?></strong>
+    </article>
+    <article class="stat-card">
+        <span>Queued Requests</span>
+        <strong><?php echo e($totalRequests); ?></strong>
     </article>
 </section>
 
@@ -127,6 +156,44 @@ render_header('Dashboard', 'dashboard');
                 </tbody>
             </table>
         </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="section-title">
+        <div>
+            <h2>Top Requested Books</h2>
+            <p class="helper-text">Queue demand helps decide which books should be approved for purchase next.</p>
+        </div>
+        <a href="requests.php">Open queue</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Book</th>
+                    <th>Author</th>
+                    <th>Pending</th>
+                    <th>Total Requests</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($topQueueRequests === []) : ?>
+                    <tr>
+                        <td colspan="4" class="empty-state">No queued requests yet.</td>
+                    </tr>
+                <?php else : ?>
+                    <?php foreach ($topQueueRequests as $row) : ?>
+                        <tr>
+                            <td><?php echo e($row['requested_title']); ?></td>
+                            <td><?php echo e($row['requested_author'] ?: '-'); ?></td>
+                            <td><?php echo e($row['pending_requests']); ?></td>
+                            <td><?php echo e($row['total_requests']); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
     </div>
 </section>
 

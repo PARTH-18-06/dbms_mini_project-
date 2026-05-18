@@ -84,3 +84,28 @@ CREATE TABLE Issue_Books (
         REFERENCES Librarians(librarian_id)
 );
 
+CREATE TABLE Book_Requests (
+    request_id INT AUTO_INCREMENT,
+    member_id INT NOT NULL,
+    book_id INT,
+    requested_title VARCHAR(150) NOT NULL,
+    requested_author VARCHAR(100),
+    requested_isbn VARCHAR(20),
+    category VARCHAR(80),
+    request_notes VARCHAR(255),
+    request_date DATE NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    approved_date DATE,
+    purchase_date DATE,
+
+    CONSTRAINT pk_book_requests PRIMARY KEY (request_id),
+
+    CONSTRAINT fk_book_requests_member
+        FOREIGN KEY (member_id)
+        REFERENCES Members(member_id),
+
+    CONSTRAINT fk_book_requests_book
+        FOREIGN KEY (book_id)
+        REFERENCES Books(book_id)
+);
+

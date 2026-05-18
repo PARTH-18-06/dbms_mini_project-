@@ -8,7 +8,9 @@
 | `index.php` | Dashboard with total counts and recent issue records |
 | `books.php` | Display, search, and add books |
 | `members.php` | Display and add members |
-| `issue_books.php` | Issue books, show issue records, and return books |
+| `issue_books.php` | Issue books, queue unavailable book requests, and return books |
+| `requests.php` | Review request demand and approve books for purchasing |
+| `reports.php` | Show overdue books, borrowing summaries, and fine tracking |
 | `style.css` | Frontend styling |
 
 ## Database Setup
@@ -65,3 +67,5 @@ http://localhost:8000
 - Books: `books.php`
 - Members: `members.php`
 - Issue Books: `issue_books.php`
+- Requests: `requests.php`
+- Reports: `reports.php`
