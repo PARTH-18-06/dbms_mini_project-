@@ -7,90 +7,28 @@ try {
     render_db_error($error->getMessage());
 }
 
-$message = '';
-$search = trim($_GET['search'] ?? '');
-$category = trim($_GET['category'] ?? '');
+$authors = $connection->query(
+    "SELECT author_id, author_name
+     FROM Authors
+     ORDER BY author_name"
+)->fetch_all(MYSQLI_ASSOC);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $isbn = trim($_POST['isbn'] ?? '');
-    $title = trim($_POST['title'] ?? '');
-    $authorId = (int) ($_POST['author_id'] ?? 0);
-    $bookCategory = trim($_POST['category'] ?? '');
-    $publisher = trim($_POST['publisher'] ?? '');
-    $publicationDate = null_if_empty($_POST['publication_date'] ?? '');
-    $totalCopies = (int) ($_POST['total_copies'] ?? 1);
-    $shelfNo = trim($_POST['shelf_no'] ?? '');
+$categories = $connection->query(
+    "SELECT DISTINCT category
+     FROM Books
+     WHERE category IS NOT NULL
+       AND TRIM(category) <> ''
+     ORDER BY category"
+)->fetch_all(MYSQLI_ASSOC);
 
-    if ($isbn === '' || $title === '' || $authorId <= 0 || $totalCopies < 1) {
-        $message = 'Please fill ISBN, title, author, and valid copy count.';
-    } else {
-        $stmt = $connection->prepare(
-            "INSERT INTO Books
-            (isbn, title, author_id, category, publisher, publication_date, total_copies, available_copies, shelf_no)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        );
-        $stmt->bind_param(
-            'ssisssiis',
-            $isbn,
-            $title,
-            $authorId,
-            $bookCategory,
-            $publisher,
-            $publicationDate,
-            $totalCopies,
-            $totalCopies,
-            $shelfNo
-        );
-        $stmt->execute();
-        $message = 'Book added successfully.';
-    }
-}
-
-$authors = $connection->query("SELECT author_id, author_name FROM Authors ORDER BY author_name");
-$categories = $connection->query("SELECT DISTINCT category FROM Books WHERE category IS NOT NULL ORDER BY category");
-
-$sql = "SELECT
-            b.book_id,
-            b.isbn,
-            b.title,
-            a.author_name,
-            b.category,
-            b.publisher,
-            b.publication_date,
-            b.total_copies,
-            b.available_copies,
-            b.shelf_no
-        FROM Books b
-        JOIN Authors a ON b.author_id = a.author_id
-        WHERE 1 = 1";
-
-$types = '';
-$params = [];
-
-if ($search !== '') {
-    $sql .= " AND (b.title LIKE ? OR b.isbn LIKE ? OR a.author_name LIKE ?)";
-    $likeSearch = '%' . $search . '%';
-    $types .= 'sss';
-    $params[] = $likeSearch;
-    $params[] = $likeSearch;
-    $params[] = $likeSearch;
-}
-
-if ($category !== '') {
-    $sql .= " AND b.category = ?";
-    $types .= 's';
-    $params[] = $category;
-}
-
-$sql .= " ORDER BY b.title";
-$stmt = $connection->prepare($sql);
-
-if ($params) {
-    $stmt->bind_param($types, ...$params);
-}
-
-$stmt->execute();
-$books = $stmt->get_result();
+$bootstrap = [
+    'apiUrl' => 'api_books.php',
+    'authors' => $authors,
+    'categories' => array_values(array_map(
+        static fn(array $row): string => (string) $row['category'],
+        $categories
+    )),
+];
 
 render_header('Books', 'books');
 ?>
@@ -102,51 +40,62 @@ render_header('Books', 'books');
     </div>
 </section>
 
-<?php if ($message !== '') : ?>
-    <div class="notice"><?php echo e($message); ?></div>
-<?php endif; ?>
+<div id="book-message" class="notice is-hidden" role="status" aria-live="polite"></div>
 
 <section class="panel">
-    <h3>Add New Book</h3>
-    <form method="post" class="form-grid">
+    <div class="section-title">
+        <div>
+            <h3>AJAX CRUD for Books</h3>
+            <p class="helper-text">Add, update, search, and delete books without reloading the full page.</p>
+        </div>
+    </div>
+    <form id="book-form" class="form-grid">
+        <input type="hidden" name="book_id" id="book_id">
         <label>
             ISBN
-            <input type="text" name="isbn" required>
+            <input type="text" name="isbn" id="isbn" required>
         </label>
         <label>
             Title
-            <input type="text" name="title" required>
+            <input type="text" name="title" id="title" required>
         </label>
         <label>
             Author
-            <select name="author_id" required>
+            <select name="author_id" id="author_id" required>
                 <option value="">Select author</option>
-                <?php while ($author = $authors->fetch_assoc()) : ?>
+                <?php foreach ($authors as $author) : ?>
                     <option value="<?php echo e($author['author_id']); ?>"><?php echo e($author['author_name']); ?></option>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             </select>
         </label>
         <label>
             Category
-            <input type="text" name="category">
+            <input type="text" name="category" id="category">
         </label>
         <label>
             Publisher
-            <input type="text" name="publisher">
+            <input type="text" name="publisher" id="publisher">
         </label>
         <label>
             Publication Date
-            <input type="date" name="publication_date">
+            <input type="date" name="publication_date" id="publication_date">
         </label>
         <label>
-            Copies
-            <input type="number" name="total_copies" min="1" value="1" required>
+            Total Copies
+            <input type="number" name="total_copies" id="total_copies" min="1" value="1" required>
+        </label>
+        <label>
+            Available Copies
+            <input type="number" name="available_copies" id="available_copies" min="0" value="1" required>
         </label>
         <label>
             Shelf No
-            <input type="text" name="shelf_no">
+            <input type="text" name="shelf_no" id="shelf_no">
         </label>
-        <button type="submit">Add Book</button>
+        <div class="form-actions">
+            <button type="submit" id="book-submit">Add Book</button>
+            <button type="button" id="book-cancel" class="button ghost is-hidden">Cancel Edit</button>
+        </div>
     </form>
 </section>
 
@@ -154,18 +103,13 @@ render_header('Books', 'books');
     <div class="section-title">
         <h3>Book List</h3>
     </div>
-    <form method="get" class="toolbar">
-        <input type="text" name="search" placeholder="Search title, ISBN, author" value="<?php echo e($search); ?>">
-        <select name="category">
+    <form id="book-filter-form" class="toolbar">
+        <input type="text" name="search" id="book-search" placeholder="Search title, ISBN, author">
+        <select name="category" id="book-filter-category">
             <option value="">All categories</option>
-            <?php while ($row = $categories->fetch_assoc()) : ?>
-                <option value="<?php echo e($row['category']); ?>" <?php echo $category === $row['category'] ? 'selected' : ''; ?>>
-                    <?php echo e($row['category']); ?>
-                </option>
-            <?php endwhile; ?>
         </select>
         <button type="submit">Search</button>
-        <a class="button ghost" href="books.php">Clear</a>
+        <button type="button" id="book-clear" class="button ghost">Clear</button>
     </form>
     <div class="table-wrap">
         <table>
@@ -179,24 +123,21 @@ render_header('Books', 'books');
                     <th>Total</th>
                     <th>Available</th>
                     <th>Shelf</th>
+                    <th>Action</th>
                 </tr>
             </thead>
-            <tbody>
-                <?php while ($book = $books->fetch_assoc()) : ?>
-                    <tr>
-                        <td><?php echo e($book['book_id']); ?></td>
-                        <td><?php echo e($book['title']); ?></td>
-                        <td><?php echo e($book['author_name']); ?></td>
-                        <td><?php echo e($book['category']); ?></td>
-                        <td><?php echo e($book['publisher']); ?></td>
-                        <td><?php echo e($book['total_copies']); ?></td>
-                        <td><?php echo e($book['available_copies']); ?></td>
-                        <td><?php echo e($book['shelf_no']); ?></td>
-                    </tr>
-                <?php endwhile; ?>
+            <tbody id="books-table-body">
+                <tr>
+                    <td colspan="9" class="empty-state">Loading books...</td>
+                </tr>
             </tbody>
         </table>
     </div>
 </section>
+
+<script>
+window.BOOKS_CRUD_BOOTSTRAP = <?php echo json_encode($bootstrap, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+</script>
+<script src="books-crud.js"></script>
 
 <?php render_footer(); ?>

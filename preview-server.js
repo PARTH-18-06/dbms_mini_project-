@@ -11,7 +11,8 @@ const columns = {
     Books: ['book_id', 'isbn', 'title', 'author_id', 'category', 'publisher', 'publication_date', 'total_copies', 'available_copies', 'shelf_no'],
     Members: ['member_id', 'member_code', 'full_name', 'department', 'semester', 'phone', 'email', 'join_date', 'status'],
     Librarians: ['librarian_id', 'librarian_name', 'phone', 'email', 'hire_date', 'shift_time'],
-    Issue_Books: ['issue_id', 'book_id', 'member_id', 'librarian_id', 'issue_date', 'due_date', 'return_date', 'fine_amount', 'issue_status']
+    Issue_Books: ['issue_id', 'book_id', 'member_id', 'librarian_id', 'issue_date', 'due_date', 'return_date', 'fine_amount', 'issue_status'],
+    Book_Requests: ['request_id', 'member_id', 'book_id', 'requested_title', 'requested_author', 'requested_isbn', 'category', 'request_notes', 'request_date', 'status', 'approved_date', 'purchase_date']
 };
 
 const data = loadSampleData();
@@ -210,60 +211,106 @@ function stat(label, value) {
     return `<article class="stat-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`;
 }
 
-function booksPage(params, message = '') {
-    const search = String(params.get('search') || '').trim().toLowerCase();
-    const category = String(params.get('category') || '').trim();
-    const categories = [...new Set(data.Books.map(book => book.category).filter(Boolean))].sort();
+function bookCategories() {
+    return [...new Set(data.Books.map(book => String(book.category || '').trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b));
+}
 
-    const rows = data.Books
-        .filter(book => !category || book.category === category)
+function serializeBook(book) {
+    return {
+        ...book,
+        author_name: authorName(book.author_id)
+    };
+}
+
+function filteredBooks(search = '', category = '') {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    const normalizedCategory = String(category || '').trim();
+
+    return data.Books
+        .filter(book => !normalizedCategory || book.category === normalizedCategory)
         .filter(book => {
-            if (!search) {
+            if (!normalizedSearch) {
                 return true;
             }
-            return [book.title, book.isbn, authorName(book.author_id)].some(value => String(value).toLowerCase().includes(search));
+            return [book.title, book.isbn, authorName(book.author_id)].some(value => String(value).toLowerCase().includes(normalizedSearch));
         })
-        .sort((a, b) => String(a.title).localeCompare(String(b.title)));
+        .sort((a, b) => String(a.title).localeCompare(String(b.title)))
+        .map(serializeBook);
+}
+
+function booksPage() {
+    const bootstrap = JSON.stringify({
+        apiUrl: '/api/books',
+        authors: data.Authors.map(author => ({
+            author_id: author.author_id,
+            author_name: author.author_name
+        })),
+        categories: bookCategories()
+    }).replace(/</g, '\\u003c');
 
     return layout('Books', 'books', `
 <section class="section-title"><div><p class="eyebrow">Catalog</p><h2>Books</h2></div></section>
-${message ? `<div class="notice">${escapeHtml(message)}</div>` : ''}
+<div id="book-message" class="notice is-hidden" role="status" aria-live="polite"></div>
 <section class="panel">
-    <h3>Add New Book</h3>
-    <form method="post" class="form-grid">
-        ${input('ISBN', 'isbn', '', true)}
-        ${input('Title', 'title', '', true)}
-        <label>Author<select name="author_id" required><option value="">Select author</option>${data.Authors.map(author => `<option value="${author.author_id}">${escapeHtml(author.author_name)}</option>`).join('')}</select></label>
-        ${input('Category', 'category')}
-        ${input('Publisher', 'publisher')}
-        <label>Publication Date<input type="date" name="publication_date"></label>
-        <label>Copies<input type="number" name="total_copies" min="1" value="1" required></label>
-        ${input('Shelf No', 'shelf_no')}
-        <button type="submit">Add Book</button>
+    <div class="section-title">
+        <div>
+            <h3>AJAX CRUD for Books</h3>
+            <p class="helper-text">Add, update, search, and delete books without reloading the full page.</p>
+        </div>
+    </div>
+    <form id="book-form" class="form-grid">
+        <input type="hidden" name="book_id" id="book_id">
+        ${input('ISBN', 'isbn', '', true, 'isbn')}
+        ${input('Title', 'title', '', true, 'title')}
+        <label>Author<select name="author_id" id="author_id" required><option value="">Select author</option>${data.Authors.map(author => `<option value="${author.author_id}">${escapeHtml(author.author_name)}</option>`).join('')}</select></label>
+        ${input('Category', 'category', '', false, 'category')}
+        ${input('Publisher', 'publisher', '', false, 'publisher')}
+        <label>Publication Date<input type="date" name="publication_date" id="publication_date"></label>
+        <label>Total Copies<input type="number" name="total_copies" id="total_copies" min="1" value="1" required></label>
+        <label>Available Copies<input type="number" name="available_copies" id="available_copies" min="0" value="1" required></label>
+        ${input('Shelf No', 'shelf_no', '', false, 'shelf_no')}
+        <div class="form-actions">
+            <button type="submit" id="book-submit">Add Book</button>
+            <button type="button" id="book-cancel" class="button ghost is-hidden">Cancel Edit</button>
+        </div>
     </form>
 </section>
 <section class="panel">
     <div class="section-title"><h3>Book List</h3></div>
-    <form method="get" class="toolbar">
-        <input type="text" name="search" placeholder="Search title, ISBN, author" value="${escapeHtml(params.get('search') || '')}">
-        <select name="category">
+    <form id="book-filter-form" class="toolbar">
+        <input type="text" name="search" id="book-search" placeholder="Search title, ISBN, author">
+        <select name="category" id="book-filter-category">
             <option value="">All categories</option>
-            ${categories.map(item => `<option value="${escapeHtml(item)}" ${category === item ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
         </select>
         <button type="submit">Search</button>
-        <a class="button ghost" href="books.php">Clear</a>
+        <button type="button" id="book-clear" class="button ghost">Clear</button>
     </form>
-    ${table(['ID', 'Title', 'Author', 'Category', 'Publisher', 'Total', 'Available', 'Shelf'], rows.map(book => [
-        book.book_id,
-        book.title,
-        authorName(book.author_id),
-        book.category,
-        book.publisher,
-        book.total_copies,
-        book.available_copies,
-        book.shelf_no
-    ]))}
-</section>`);
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Category</th>
+                    <th>Publisher</th>
+                    <th>Total</th>
+                    <th>Available</th>
+                    <th>Shelf</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="books-table-body">
+                <tr>
+                    <td colspan="9" class="empty-state">Loading books...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+<script>window.BOOKS_CRUD_BOOTSTRAP = ${bootstrap};</script>
+<script src="/books-crud.js"></script>`);
 }
 
 function membersPage(message = '') {
@@ -341,8 +388,8 @@ ${error ? `<div class="notice danger">${escapeHtml(error)}</div>` : ''}
 </section>`);
 }
 
-function input(label, name, placeholder = '', required = false) {
-    return `<label>${escapeHtml(label)}<input type="text" name="${escapeHtml(name)}" placeholder="${escapeHtml(placeholder)}" ${required ? 'required' : ''}></label>`;
+function input(label, name, placeholder = '', required = false, id = '') {
+    return `<label>${escapeHtml(label)}<input type="text" name="${escapeHtml(name)}" ${id ? `id="${escapeHtml(id)}"` : ''} placeholder="${escapeHtml(placeholder)}" ${required ? 'required' : ''}></label>`;
 }
 
 function badge(value) {
@@ -353,33 +400,152 @@ function table(headers, rows) {
     return `<div class="table-wrap"><table><thead><tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${String(cell ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 
-function handlePost(pathname, form) {
-    if (pathname.endsWith('/books.php')) {
-        const title = String(form.get('title') || '').trim();
-        const isbn = String(form.get('isbn') || '').trim();
-        const authorId = Number(form.get('author_id'));
-        const totalCopies = Math.max(1, Number(form.get('total_copies')) || 1);
+function sendJson(response, statusCode, payload) {
+    send(response, statusCode, JSON.stringify(payload), 'application/json; charset=utf-8');
+}
 
-        if (!title || !isbn || !authorId) {
-            return booksPage(new URLSearchParams(), 'Please fill ISBN, title, author, and valid copy count.');
-        }
+function readRequestBody(request, callback) {
+    let body = '';
+    request.on('data', chunk => {
+        body += chunk;
+    });
+    request.on('end', () => {
+        callback(body);
+    });
+}
 
-        data.Books.push({
-            book_id: nextId(data.Books, 'book_id'),
+function parseJsonBody(body) {
+    if (!body || !body.trim()) {
+        return {};
+    }
+
+    try {
+        return JSON.parse(body);
+    } catch (error) {
+        return null;
+    }
+}
+
+function authorExists(authorId) {
+    return data.Authors.some(author => Number(author.author_id) === Number(authorId));
+}
+
+function validateBookPayload(payload, requireBookId = false) {
+    const bookId = Number(payload.book_id || 0);
+    const isbn = String(payload.isbn || '').trim();
+    const title = String(payload.title || '').trim();
+    const authorId = Number(payload.author_id || 0);
+    const category = String(payload.category || '').trim();
+    const publisher = String(payload.publisher || '').trim();
+    const publicationDate = String(payload.publication_date || '').trim() || null;
+    const totalCopies = Number(payload.total_copies || 0);
+    const availableCopies = Number(payload.available_copies ?? totalCopies);
+    const shelfNo = String(payload.shelf_no || '').trim();
+
+    if ((requireBookId && !bookId) || !isbn || !title || !authorId || totalCopies < 1) {
+        return { error: 'Please fill ISBN, title, author, and a valid total copy count.' };
+    }
+
+    if (!authorExists(authorId)) {
+        return { error: 'Selected author was not found.' };
+    }
+
+    if (availableCopies < 0 || availableCopies > totalCopies) {
+        return { error: 'Available copies must be between 0 and total copies.' };
+    }
+
+    return {
+        value: {
+            book_id: bookId,
             isbn,
             title,
             author_id: authorId,
-            category: String(form.get('category') || '').trim(),
-            publisher: String(form.get('publisher') || '').trim(),
-            publication_date: String(form.get('publication_date') || '').trim() || null,
+            category,
+            publisher,
+            publication_date: publicationDate,
             total_copies: totalCopies,
-            available_copies: totalCopies,
-            shelf_no: String(form.get('shelf_no') || '').trim()
-        });
+            available_copies: availableCopies,
+            shelf_no: shelfNo
+        }
+    };
+}
 
-        return booksPage(new URLSearchParams(), 'Book added successfully.');
+function handleBooksApi(request, response, requestUrl) {
+    if (request.method === 'GET') {
+        sendJson(response, 200, {
+            success: true,
+            books: filteredBooks(requestUrl.searchParams.get('search') || '', requestUrl.searchParams.get('category') || ''),
+            categories: bookCategories()
+        });
+        return;
     }
 
+    if (request.method === 'POST' || request.method === 'PUT') {
+        readRequestBody(request, body => {
+            const payload = parseJsonBody(body);
+            if (!payload) {
+                sendJson(response, 400, { success: false, message: 'Invalid JSON payload.' });
+                return;
+            }
+
+            const parsed = validateBookPayload(payload, request.method === 'PUT');
+            if (parsed.error) {
+                sendJson(response, 422, { success: false, message: parsed.error });
+                return;
+            }
+
+            if (request.method === 'POST') {
+                data.Books.push({
+                    ...parsed.value,
+                    book_id: nextId(data.Books, 'book_id')
+                });
+                sendJson(response, 201, { success: true, message: 'Book created successfully.' });
+                return;
+            }
+
+            const existingBook = data.Books.find(book => Number(book.book_id) === Number(parsed.value.book_id));
+            if (!existingBook) {
+                sendJson(response, 404, { success: false, message: 'Book not found.' });
+                return;
+            }
+
+            Object.assign(existingBook, parsed.value);
+            sendJson(response, 200, { success: true, message: 'Book updated successfully.' });
+        });
+        return;
+    }
+
+    if (request.method === 'DELETE') {
+        const bookId = Number(requestUrl.searchParams.get('book_id') || 0);
+        if (!bookId) {
+            sendJson(response, 422, { success: false, message: 'Please choose a valid book to delete.' });
+            return;
+        }
+
+        if (data.Issue_Books.some(issue => Number(issue.book_id) === bookId)
+            || data.Book_Requests.some(requestRow => Number(requestRow.book_id) === bookId)) {
+            sendJson(response, 409, {
+                success: false,
+                message: 'This book has related issue or request records, so it cannot be deleted safely.'
+            });
+            return;
+        }
+
+        const index = data.Books.findIndex(book => Number(book.book_id) === bookId);
+        if (index === -1) {
+            sendJson(response, 404, { success: false, message: 'Book not found.' });
+            return;
+        }
+
+        data.Books.splice(index, 1);
+        sendJson(response, 200, { success: true, message: 'Book deleted successfully.' });
+        return;
+    }
+
+    sendJson(response, 405, { success: false, message: 'Method not allowed.' });
+}
+
+function handlePost(pathname, form) {
     if (pathname.endsWith('/members.php')) {
         const memberCode = String(form.get('member_code') || '').trim();
         const fullName = String(form.get('full_name') || '').trim();
@@ -469,23 +635,29 @@ http.createServer((request, response) => {
         return;
     }
 
+    if (pathname === '/books-crud.js') {
+        send(response, 200, fs.readFileSync(path.join(ROOT, 'frontend', 'books-crud.js'), 'utf8'), 'application/javascript; charset=utf-8');
+        return;
+    }
+
+    if (pathname === '/api/books') {
+        handleBooksApi(request, response, requestUrl);
+        return;
+    }
+
     if (pathname === '/') {
         pathname = '/index.php';
     }
 
     if (request.method === 'POST') {
-        let body = '';
-        request.on('data', chunk => {
-            body += chunk;
-        });
-        request.on('end', () => {
+        readRequestBody(request, body => {
             send(response, 200, handlePost(pathname, new URLSearchParams(body)));
         });
         return;
     }
 
     if (pathname.endsWith('/books.php')) {
-        send(response, 200, booksPage(requestUrl.searchParams));
+        send(response, 200, booksPage());
         return;
     }
 

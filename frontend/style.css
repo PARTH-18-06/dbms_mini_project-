@@ -193,6 +193,10 @@ nav a:hover {
     color: var(--danger);
 }
 
+.is-hidden {
+    display: none !important;
+}
+
 .helper-text {
     margin: 8px 0 0;
     color: var(--muted);
@@ -245,6 +249,12 @@ textarea {
 
 .field-span-full {
     grid-column: 1 / -1;
+}
+
+.form-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
 }
 
 .toolbar {
@@ -316,6 +326,21 @@ tr:hover td {
     min-height: 32px;
     padding: 6px 10px;
     font-size: 12px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.danger-button {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #ffffff;
+}
+
+.danger-button:hover {
+    border-color: #991b1b;
 }
 
 .mini-input {
